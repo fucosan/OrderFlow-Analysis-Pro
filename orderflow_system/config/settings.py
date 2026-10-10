@@ -154,7 +154,7 @@ class TelegramConfig:
 class DashboardConfig:
     """Web dashboard settings."""
     enabled: bool = True
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8080
     log_level: str = "warning"        # uvicorn log level
 
@@ -878,41 +878,41 @@ def get_all_configs() -> list[InstrumentConfig]:
     """Return config for ALL instruments."""
     return [
         # Indices
-        get_nas100_config(),
-        get_sp500_config(),
-        get_dj30_config(),
-        get_uk100_config(),
-        get_dax40_config(),
-        get_nikkei225_config(),
-        get_cac40_config(),
-        get_asx200_config(),
-        get_hk50_config(),
+        # get_nas100_config(),
+        # get_sp500_config(),
+        # get_dj30_config(),
+        # get_uk100_config(),
+        # get_dax40_config(),
+        # get_nikkei225_config(),
+        # get_cac40_config(),
+        # get_asx200_config(),
+        # get_hk50_config(),
         # Metals
         get_gold_config(),
-        get_silver_config(),
+        # get_silver_config(),
         # Energy
-        get_usoil_config(),
-        get_ukoil_config(),
+        # get_usoil_config(),
+        # get_ukoil_config(),
         # Forex Majors
-        get_eurusd_config(),
-        get_gbpusd_config(),
-        get_usdjpy_config(),
-        get_audusd_config(),
-        get_usdcad_config(),
-        get_usdchf_config(),
-        get_nzdusd_config(),
+        # get_eurusd_config(),
+        # get_gbpusd_config(),
+        # get_usdjpy_config(),
+        # get_audusd_config(),
+        # get_usdcad_config(),
+        # get_usdchf_config(),
+        # get_nzdusd_config(),
         # Forex Crosses
-        get_eurgbp_config(),
-        get_eurjpy_config(),
-        get_gbpjpy_config(),
+        # get_eurgbp_config(),
+        # get_eurjpy_config(),
+        # get_gbpjpy_config(),
         # Stocks
-        get_aapl_config(),
-        get_tsla_config(),
-        get_amzn_config(),
-        get_msft_config(),
-        get_nvda_config(),
-        get_meta_config(),
-        get_googl_config(),
+        # get_aapl_config(),
+        # get_tsla_config(),
+        # get_amzn_config(),
+        # get_msft_config(),
+        # get_nvda_config(),
+        # get_meta_config(),
+        # get_googl_config(),
         # Crypto
         get_btcusd_config(),
     ]
@@ -923,7 +923,7 @@ def get_all_configs() -> list[InstrumentConfig]:
 #   DataSource.MT5   → Use MetaTrader 5 (real broker data for NAS100, XAUUSD)
 #   DataSource.BYBIT → Use Bybit perpetuals (free crypto data)
 #   DataSource.BOTH  → Run both feeds simultaneously
-DATA_SOURCE = DataSource.MT5
+DATA_SOURCE = DataSource.BYBIT
 
 # ── MT5 Configuration ──
 # Adjust symbol names to match your broker!
@@ -933,7 +933,10 @@ DATA_SOURCE = DataSource.MT5
 MT5 = MT5Config()
 
 # Telegram config — user fills in their token/chat_id
-TELEGRAM = TelegramConfig()
+TELEGRAM = TelegramConfig(
+    bot_token="8845141574:AAF9bVTpOPhhNBWQoeiwblQkpPm_AbLCpQw",
+    chat_id="939468686",
+)
 
 # ── Dashboard ──
 # Web dashboard at http://localhost:8080

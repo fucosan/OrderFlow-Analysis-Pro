@@ -40,7 +40,14 @@ class TelegramAlertBot:
 
         try:
             from telegram import Bot
-            self._bot = Bot(token=self.bot_token)
+            from telegram.request import HTTPXRequest
+            import httpx
+
+            # Force IPv4 — some networks (e.g. ISPs with broken IPv6) hang on
+            # IPv6 resolution and time out before falling back to IPv4.
+            transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
+            request = HTTPXRequest(httpx_kwargs={"transport": transport})
+            self._bot = Bot(token=self.bot_token, request=request)
             me = await self._bot.get_me()
             logger.info(f"Telegram bot connected: @{me.username}")
         except ImportError:

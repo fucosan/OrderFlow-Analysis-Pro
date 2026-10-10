@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "orderflow-system"
@@ -19,6 +19,8 @@ dependencies = [
     "aiosqlite>=0.19",
     "pytz>=2024.1",
     "pyyaml>=6.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
 ]
 
 [project.optional-dependencies]

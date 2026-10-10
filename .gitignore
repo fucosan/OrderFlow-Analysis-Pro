@@ -20,3 +20,6 @@ venv/
 Thumbs.db
 .claude/
 .continue/
+
+# Local config with secrets (Telegram token, MT5 credentials)
+orderflow_system/config/settings.py
