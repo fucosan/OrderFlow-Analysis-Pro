@@ -262,12 +262,14 @@ class SignalAggregator:
                 return None
             nearest_level = self._find_qualified_level(bias, trade.qualified_level)
 
-        trade.advance_to_absorption(signal)
-
+        # Compute composite score BEFORE advancing trade state, so the
+        # dashboard and Telegram alert use the same criteria.
         score = self._compute_composite_score(signal, nearest_level, bias)
 
         if score < self.min_composite_score:
             return None
+
+        trade.advance_to_absorption(signal)
 
         sl, tp = self._compute_sl_tp(
             signal.direction, nearest_level, bias, current_price

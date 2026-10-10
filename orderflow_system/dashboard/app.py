@@ -21,13 +21,13 @@ import logging
 import os
 from typing import Any, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from orderflow_system.dashboard.websocket_manager import WebSocketManager, _serialize
-from orderflow_system.data.models import TradePhase
+from orderflow_system.data.models import TradePhase, Side
 from orderflow_system.dashboard import demo_data
 
 logger = logging.getLogger(__name__)
@@ -945,6 +945,96 @@ async def get_stats():
         "instruments": instruments,
         "running": system._running,
     }
+
+
+# ──────────────────────────────────────────────
+# Trade Journal — Take / Close (manual confirmation)
+# ──────────────────────────────────────────────
+
+@app.post("/api/trade/{symbol}/take")
+async def take_trade(symbol: str, entry_price: float = Body(default=0.0, embed=True)):
+    """
+    User confirms they took the entry.
+    Records the trade in the journal and notifies Telegram.
+    """
+    system = get_system()
+    if not system:
+        return JSONResponse({"error": "System not running"}, status_code=503)
+
+    trade = system.aggregator.get_active_trade(symbol)
+    if not trade:
+        return JSONResponse({"error": f"No active trade for {symbol}"}, status_code=404)
+
+    # Use provided entry price, or the trade's suggested entry
+    actual_entry = entry_price if entry_price > 0 else trade.entry_price
+
+    # Log to journal
+    await system.db.log_trade(
+        instrument=symbol,
+        direction=trade.direction.value,
+        entry_price=actual_entry,
+        exit_price=0.0,
+        stop_loss=trade.stop_loss,
+        take_profit=trade.take_profit,
+        pnl_ticks=0.0,
+        rr_ratio=trade.rr_ratio,
+        signals=trade.absorption_signals,
+        notes="Manual entry confirmed by user",
+        entry_time_ms=trade.entry_time_ms,
+    )
+
+    # Notify Telegram
+    await system.telegram.send_trade_taken(symbol, trade, actual_entry)
+
+    return {"ok": True, "symbol": symbol, "entry_price": actual_entry}
+
+
+@app.post("/api/trade/{symbol}/close")
+async def close_trade(symbol: str, exit_price: float = Body(default=0.0, embed=True)):
+    """
+    User confirms they closed the trade.
+    Records the exit in the journal and notifies Telegram.
+    """
+    system = get_system()
+    if not system:
+        return JSONResponse({"error": "System not running"}, status_code=503)
+
+    trade = system.aggregator.get_active_trade(symbol)
+    if not trade:
+        return JSONResponse({"error": f"No active trade for {symbol}"}, status_code=404)
+
+    # Use provided exit price, or the current price
+    actual_exit = exit_price if exit_price > 0 else trade.entry_price
+
+    # Compute PnL in ticks
+    if trade.direction == Side.BUY:
+        pnl_ticks = actual_exit - trade.entry_price
+    else:
+        pnl_ticks = trade.entry_price - actual_exit
+
+    # Close the trade in the state machine
+    system.aggregator.close_trade(symbol, actual_exit, "Manual close by user")
+
+    # Log to journal
+    await system.db.log_trade(
+        instrument=symbol,
+        direction=trade.direction.value,
+        entry_price=trade.entry_price,
+        exit_price=actual_exit,
+        stop_loss=trade.stop_loss,
+        take_profit=trade.take_profit,
+        pnl_ticks=pnl_ticks,
+        rr_ratio=trade.rr_ratio,
+        signals=trade.absorption_signals,
+        notes="Manual close by user",
+        entry_time_ms=trade.entry_time_ms,
+        exit_time_ms=int(__import__("time").time() * 1000),
+    )
+
+    # Notify Telegram
+    await system.telegram.send_trade_closed(symbol, trade, actual_exit, pnl_ticks)
+
+    return {"ok": True, "symbol": symbol, "exit_price": actual_exit, "pnl_ticks": pnl_ticks}
 
 
 # ──────────────────────────────────────────────

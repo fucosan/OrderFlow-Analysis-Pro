@@ -100,6 +100,8 @@ class InstrumentPipeline:
         self._tick_count: int = 0
         # Callback for routing candle-close signals to the system
         self._on_signals_callback = None
+        # Callback for routing closed candles to the system (DB save + broadcast)
+        self._on_candle_close_callback = None
         self._candle_count: int = 0
 
     async def process_tick(self, tick: Tick):
@@ -171,6 +173,10 @@ class InstrumentPipeline:
         if signals and self._on_signals_callback:
             await self._on_signals_callback(self.symbol, signals)
 
+        # Route the closed candle to the system (DB save + broadcast)
+        if self._on_candle_close_callback:
+            await self._on_candle_close_callback(self.symbol, candle)
+
         return signals
 
     @property
@@ -216,6 +222,7 @@ class OrderflowSystem:
         # Wire candle-close signals from each pipeline back to the system
         for sym, pipeline in self.pipelines.items():
             pipeline._on_signals_callback = self._on_candle_signals
+            pipeline._on_candle_close_callback = self._on_candle_close_handler
         self.telegram = TelegramAlertBot(
             bot_token=TELEGRAM.bot_token,
             chat_id=TELEGRAM.chat_id,
@@ -309,6 +316,10 @@ class OrderflowSystem:
             uvi_server = uvicorn.Server(uvi_config)
             feed_tasks.append(uvi_server.serve())
             logger.info(f"Dashboard enabled at http://{DASHBOARD.host}:{DASHBOARD.port}")
+
+        # Initial volume profile rebuild (once enough candles accumulate)
+        for symbol, pipeline in self.pipelines.items():
+            await self._rebuild_volume_profile(symbol, pipeline)
 
         # Run feed(s) + periodic tasks + dashboard concurrently
         await asyncio.gather(
@@ -458,12 +469,14 @@ class OrderflowSystem:
             await self._handle_signal(symbol, pipeline, signal)
 
     async def _on_candle_close_handler(self, symbol: str, candle: Candle):
-        """Process closed candle signals."""
+        """
+        Called by InstrumentPipeline when a candle closes.
+        Saves the candle to the DB and broadcasts it to the dashboard.
+        (Signal processing is already handled inside pipeline._on_candle_close.)
+        """
         pipeline = self.pipelines.get(symbol)
         if not pipeline:
             return
-
-        signals = await pipeline._on_candle_close(candle)
 
         # Store candle
         await self.db.insert_candle(symbol, "1m", candle)
@@ -485,10 +498,6 @@ class OrderflowSystem:
             "value": round(pipeline.delta_engine.cumulative_delta, 2),
             "bar_delta": round(candle.delta, 2),
         })
-
-        # Process each signal through the aggregator
-        for signal in signals:
-            await self._handle_signal(symbol, pipeline, signal)
 
     async def _handle_signal(
         self, symbol: str, pipeline: InstrumentPipeline, signal: Signal
@@ -520,7 +529,7 @@ class OrderflowSystem:
 
     async def _periodic_tasks(self):
         """Run periodic tasks: VP rebuild, bias update, stats logging."""
-        profile_interval = 3600       # Rebuild VP every hour
+        profile_interval = 300        # Rebuild VP every 5 minutes
         stats_interval = 15           # Broadcast stats every 15 sec
         last_profile = 0
         last_stats = 0

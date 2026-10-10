@@ -207,3 +207,55 @@ class TelegramAlertBot:
                 logger.info(f"Bias (local):\n{message}")
         else:
             logger.info(f"BIAS UPDATE:\n{message}")
+
+    async def send_trade_taken(self, instrument: str, trade, entry_price: float):
+        """Notify that the user manually took the entry."""
+        direction = "LONG" if trade.direction == Side.BUY else "SHORT"
+        emoji = "🟢" if trade.direction == Side.BUY else "🔴"
+        lines = [
+            "━━━ ✅ TRADE TAKEN ━━━",
+            f"{emoji} {instrument} | {direction}",
+            f"💵 Entry: {entry_price:.2f}",
+            f"🛑 Stop Loss: {trade.stop_loss:.2f}",
+            f"🎯 Take Profit: {trade.take_profit:.2f}",
+            f"📐 R:R: {trade.rr_ratio:.1f}" if trade.rr_ratio else "",
+            "",
+            "You've confirmed this entry. I'll track it in the journal.",
+            "━━━━━━━━━━━━━━━━━━━━",
+        ]
+        message = "\n".join([l for l in lines if l])
+        await self._send(message, f"Trade taken: {instrument}")
+
+    async def send_trade_closed(self, instrument: str, trade, exit_price: float, pnl_ticks: float):
+        """Notify that the user manually closed the trade."""
+        direction = "LONG" if trade.direction == Side.BUY else "SHORT"
+        emoji = "🟢" if trade.direction == Side.BUY else "🔴"
+        pnl_emoji = "✅" if pnl_ticks >= 0 else "❌"
+        lines = [
+            "━━━ 🚪 TRADE CLOSED ━━━",
+            f"{emoji} {instrument} | {direction}",
+            f"💵 Entry: {trade.entry_price:.2f}",
+            f"💵 Exit: {exit_price:.2f}",
+            f"{pnl_emoji} PnL: {pnl_ticks:+.2f} ticks",
+            f"📝 {trade.notes}" if trade.notes else "",
+            "",
+            "Trade logged to journal.",
+            "━━━━━━━━━━━━━━━━━━━━",
+        ]
+        message = "\n".join([l for l in lines if l])
+        await self._send(message, f"Trade closed: {instrument}")
+
+    async def _send(self, message: str, log_label: str):
+        """Send a message via Telegram or log it locally."""
+        if self._enabled and self._bot:
+            try:
+                await self._bot.send_message(
+                    chat_id=self.chat_id,
+                    text=message,
+                )
+                logger.info(f"Sent to Telegram: {log_label}")
+            except Exception as e:
+                logger.error(f"Failed to send Telegram message: {e}")
+                logger.info(f"Message (local):\n{message}")
+        else:
+            logger.info(f"MESSAGE:\n{message}")
