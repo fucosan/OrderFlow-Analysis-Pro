@@ -2,9 +2,15 @@
 Global settings and instrument-specific configuration.
 """
 
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
+
+from dotenv import load_dotenv
+
+# Load secrets from .env (gitignored) — never hardcode credentials here.
+load_dotenv()
 
 
 class Instrument(Enum):
@@ -932,10 +938,10 @@ DATA_SOURCE = DataSource.BYBIT
 #   Gold:   "XAUUSD", "GOLD", "XAUUSD.cash"
 MT5 = MT5Config()
 
-# Telegram config — user fills in their token/chat_id
+# Telegram config — loaded from .env (see .env.example)
 TELEGRAM = TelegramConfig(
-    bot_token="8845141574:AAF9bVTpOPhhNBWQoeiwblQkpPm_AbLCpQw",
-    chat_id="939468686",
+    bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
+    chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
 )
 
 # ── Dashboard ──
