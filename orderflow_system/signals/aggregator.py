@@ -86,6 +86,10 @@ class SignalAggregator:
         # Cooldown check
         last_ts = self._last_signal_time.get(instrument, 0)
         if now_ms - last_ts < self.signal_cooldown_seconds * 1000:
+            logger.debug(
+                f"[{instrument}] Signal suppressed: cooldown "
+                f"({(now_ms - last_ts) / 1000:.0f}s < {self.signal_cooldown_seconds}s)"
+            )
             return None
 
         active_trade = self._active_trades.get(instrument)
@@ -109,6 +113,11 @@ class SignalAggregator:
                 return self._handle_sweep_at_level(
                     instrument, signal, bias, active_trade, current_price, now_ms
                 )
+            else:
+                logger.debug(
+                    f"[{instrument}] Signal suppressed: WATCHING but signal "
+                    f"type {signal.signal_type.value} not absorption/sweep"
+                )
 
         elif active_trade.phase == TradePhase.POSITION_OPEN:
             # Position open, waiting for BE trigger
@@ -120,6 +129,11 @@ class SignalAggregator:
                 return self._handle_exit_warning(
                     instrument, signal, active_trade, now_ms
                 )
+            else:
+                logger.debug(
+                    f"[{instrument}] Signal suppressed: POSITION_OPEN but signal "
+                    f"type {signal.signal_type.value} not initiative/exit"
+                )
 
         elif active_trade.phase in (TradePhase.BREAK_EVEN, TradePhase.TRAILING):
             # Trailing — update trail or detect exit
@@ -130,6 +144,11 @@ class SignalAggregator:
             elif signal.signal_type in (SignalType.EXHAUSTION, SignalType.DIVERGENCE):
                 return self._handle_exit_warning(
                     instrument, signal, active_trade, now_ms
+                )
+            else:
+                logger.debug(
+                    f"[{instrument}] Signal suppressed: {active_trade.phase.value} "
+                    f"but signal type {signal.signal_type.value} not initiative/exit"
                 )
 
         return None
@@ -174,9 +193,17 @@ class SignalAggregator:
     ) -> Optional[AggregatedSignal]:
         """Check if a new signal qualifies for entry at a profile level."""
         if signal.signal_type != SignalType.ABSORPTION:
+            logger.debug(
+                f"[{instrument}] New-entry rejected: signal type "
+                f"{signal.signal_type.value} != absorption"
+            )
             return None  # Only absorption triggers new entries
 
         if bias is None or not bias.qualified_levels:
+            logger.debug(
+                f"[{instrument}] New-entry rejected: no qualified levels "
+                f"(bias={'None' if bias is None else 'no levels'})"
+            )
             return None
 
         # Find nearest qualified level to current price
@@ -190,16 +217,28 @@ class SignalAggregator:
                 nearest = level
 
         if nearest is None:
+            logger.debug(
+                f"[{instrument}] New-entry rejected: price {current_price:.2f} "
+                f"not within {self.price_proximity_pct:.4f} of any qualified level"
+            )
             return None  # Not near any qualified level
 
         # Check direction alignment
         if nearest.direction != signal.direction:
+            logger.debug(
+                f"[{instrument}] New-entry rejected: level dir "
+                f"{nearest.direction.value} != signal dir {signal.direction.value}"
+            )
             return None
 
         # Compute composite score
         score = self._compute_composite_score(signal, nearest, bias)
 
         if score < self.min_composite_score:
+            logger.debug(
+                f"[{instrument}] New-entry rejected: score {score:.0f} < "
+                f"{self.min_composite_score}"
+            )
             return None
 
         # Create trade state

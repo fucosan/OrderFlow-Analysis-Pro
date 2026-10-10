@@ -74,6 +74,7 @@ class DataSource(Enum):
     """Data feed source selection."""
     BYBIT = "bybit"              # Bybit perpetual futures (free WebSocket)
     MT5 = "mt5"                  # MetaTrader 5 terminal (real broker data)
+    IB = "ib"                    # Interactive Brokers (IB Gateway / TWS)
     BOTH = "both"                # Run both feeds simultaneously
 
 
@@ -218,6 +219,23 @@ class MT5Config:
     poll_interval_ms: int = 100               # Tick polling interval (ms)
     enable_book: bool = True                  # Enable DOM/Market Depth data
     download_history_days: int = 3            # Days of historical M1 bars to download (3d = ~4320 candles, covers 1W range at 1H TF)
+
+
+@dataclass
+class IBConfig:
+    """Interactive Brokers (IB Gateway / TWS) connection settings."""
+    host: str = "127.0.0.1"
+    port: int = 4002                          # IB Gateway: 4002 paper / 4001 live; TWS: 7497 paper / 7496 live
+    client_id: int = 1
+    # Symbol mapping: internal name → (contract type, symbol, currency, exchange)
+    # Contract types: STOCK, FOREX, CFD, INDEX, CRYPTO
+    symbols: dict = field(default_factory=lambda: {
+        # ── Metals ──
+        "XAUUSDT": ("CFD", "XAUUSD", "USD", "SMART"),
+        # ── Crypto ──
+        "BTCUSDT": ("CRYPTO", "BTC", "USD", "PAXOS"),
+    })
+    download_history_days: int = 3            # Days of historical bars to download
 
 
 @dataclass
@@ -928,8 +946,9 @@ def get_all_configs() -> list[InstrumentConfig]:
 # Change this to select your data feed:
 #   DataSource.MT5   → Use MetaTrader 5 (real broker data for NAS100, XAUUSD)
 #   DataSource.BYBIT → Use Bybit perpetuals (free crypto data)
+#   DataSource.IB    → Use Interactive Brokers (IB Gateway / TWS)
 #   DataSource.BOTH  → Run both feeds simultaneously
-DATA_SOURCE = DataSource.BYBIT
+DATA_SOURCE = DataSource.IB
 
 # ── MT5 Configuration ──
 # Adjust symbol names to match your broker!
@@ -937,6 +956,16 @@ DATA_SOURCE = DataSource.BYBIT
 #   NAS100: "USTEC", "NAS100", "US100", "USTEC.cash", "USTECH100", "#NAS100"
 #   Gold:   "XAUUSD", "GOLD", "XAUUSD.cash"
 MT5 = MT5Config()
+
+# ── IB Gateway Configuration ──
+# Point this at your locally running IB Gateway / TWS.
+#   IB Gateway: port 4002 (paper) / 4001 (live)
+#   TWS:        port 7497 (paper) / 7496 (live)
+IB = IBConfig(
+    host=os.getenv("IB_HOST", "127.0.0.1"),
+    port=int(os.getenv("IB_PORT", "4001")),
+    client_id=int(os.getenv("IB_CLIENT_ID", "1")),
+)
 
 # Telegram config — loaded from .env (see .env.example)
 TELEGRAM = TelegramConfig(

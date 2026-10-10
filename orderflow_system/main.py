@@ -35,6 +35,7 @@ from orderflow_system.config.settings import (
     LOG_LEVEL,
     DATA_SOURCE,
     MT5,
+    IB,
     DASHBOARD,
 )
 from orderflow_system.data.models import (
@@ -42,6 +43,7 @@ from orderflow_system.data.models import (
 )
 from orderflow_system.data.bybit_feed import BybitFeed
 from orderflow_system.data.mt5_feed import MT5Feed
+from orderflow_system.data.ib_feed import IBFeed
 from orderflow_system.data.candle_builder import CandleBuilder
 from orderflow_system.data.database import Database
 from orderflow_system.analytics.volume_profile import VolumeProfileEngine
@@ -230,6 +232,7 @@ class OrderflowSystem:
         self.db = Database(DB_PATH)
         self.feed: Optional[BybitFeed] = None
         self.mt5_feed: Optional[MT5Feed] = None
+        self.ib_feed: Optional[IBFeed] = None
         self.ws_manager: WebSocketManager = ws_manager
         self._running = False
         self._tick_batch_size = 100
@@ -298,6 +301,28 @@ class OrderflowSystem:
             feed_tasks.append(self.feed.start())
             logger.info(f"Bybit feed configured: {symbols}")
 
+        if self.data_source in (DataSource.IB, DataSource.BOTH):
+            # ── Interactive Brokers Feed ──
+            self.ib_feed = IBFeed(
+                symbols=dict(IB.symbols),
+                on_tick=self._on_tick,
+                on_orderbook=self._on_orderbook,
+                host=IB.host,
+                port=IB.port,
+                client_id=IB.client_id,
+            )
+            feed_tasks.append(self.ib_feed.start())
+            logger.info(
+                f"IB feed configured: {len(IB.symbols)} symbols "
+                f"({IB.host}:{IB.port})"
+            )
+
+            # Download historical bars once the feed has connected/qualified.
+            if IB.download_history_days > 0:
+                feed_tasks.append(
+                    self._download_ib_history(IB.download_history_days)
+                )
+
         self._running = True
         source_name = self.data_source.value.upper()
         logger.info(f"Starting live feed [{source_name}] for: {', '.join(symbols)}")
@@ -335,6 +360,8 @@ class OrderflowSystem:
             await self.feed.stop()
         if self.mt5_feed:
             await self.mt5_feed.stop()
+        if self.ib_feed:
+            await self.ib_feed.stop()
         await self.db.close()
         logger.info("System stopped.")
 
@@ -416,6 +443,34 @@ class OrderflowSystem:
 
         logger.info(
             f"History download complete: {total_added} total candles loaded"
+        )
+
+    async def _download_ib_history(self, days: int):
+        """
+        Download historical bars from IB Gateway and inject into candle
+        builders. Waits for the IB feed to connect and qualify contracts
+        before requesting history.
+        """
+        if not self.ib_feed:
+            logger.warning("No IB feed — skipping history download")
+            return
+
+        # Wait for the feed to connect and qualify contracts.
+        for _ in range(30):
+            if self.ib_feed._contracts:
+                break
+            await asyncio.sleep(1)
+
+        if not self.ib_feed._contracts:
+            logger.warning("IB feed not connected — skipping history download")
+            return
+
+        logger.info(
+            f"Downloading IB bars for {len(self.ib_feed._contracts)} "
+            f"instruments ({days}d)..."
+        )
+        await self.ib_feed.download_history(
+            self.pipelines, timeframe="1 min", days=days
         )
 
     async def _on_tick(self, symbol: str, tick: Tick):
@@ -647,6 +702,12 @@ def main():
         logger.info(f"MT5 symbols: {MT5.symbols}")
         logger.info(
             "Make sure MetaTrader 5 is running and logged into your broker account."
+        )
+    if DATA_SOURCE in (DataSource.IB, DataSource.BOTH):
+        logger.info(f"IB symbols: {IB.symbols}")
+        logger.info(
+            "Make sure IB Gateway / TWS is running with API enabled "
+            f"at {IB.host}:{IB.port}."
         )
 
     system = OrderflowSystem(data_source=DATA_SOURCE)

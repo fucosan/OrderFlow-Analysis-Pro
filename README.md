@@ -55,15 +55,15 @@ Lagging: Yes (averages)            Leading: No (real-time microstructure)
 
 ### Key Concepts
 
-| Concept | What It Measures | Why It Matters |
-|---------|-----------------|----------------|
-| **Delta** | Buy volume minus sell volume per candle/level | Who is aggressive — buyers or sellers? |
-| **Cumulative Delta** | Running total of delta over time | Is buying/selling pressure building or fading? |
-| **Footprint** | Volume at each price level split by bid/ask | Where did the heavy trading happen inside the candle? |
-| **Volume Profile** | Total volume traded at each price over a session | Where is the "fair value" — POC, VAH, VAL? |
-| **Orderbook** | Limit orders waiting at each price level | Where are the walls? Thin levels = easy to sweep. |
-| **Absorption** | Aggressive volume with no price movement | Someone is defending a level with limit orders. |
-| **Initiative** | Aggressive volume WITH price movement | Institutional conviction pushing price. |
+| Concept              | What It Measures                                 | Why It Matters                                        |
+| -------------------- | ------------------------------------------------ | ----------------------------------------------------- |
+| **Delta**            | Buy volume minus sell volume per candle/level    | Who is aggressive — buyers or sellers?                |
+| **Cumulative Delta** | Running total of delta over time                 | Is buying/selling pressure building or fading?        |
+| **Footprint**        | Volume at each price level split by bid/ask      | Where did the heavy trading happen inside the candle? |
+| **Volume Profile**   | Total volume traded at each price over a session | Where is the "fair value" — POC, VAH, VAL?            |
+| **Orderbook**        | Limit orders waiting at each price level         | Where are the walls? Thin levels = easy to sweep.     |
+| **Absorption**       | Aggressive volume with no price movement         | Someone is defending a level with limit orders.       |
+| **Initiative**       | Aggressive volume WITH price movement            | Institutional conviction pushing price.               |
 
 ---
 
@@ -255,23 +255,23 @@ The system detects 5 microstructure patterns based on Fabio Testa's methodology.
 
 ### Detection Details
 
-| # | Pattern | Detection Logic | Source Data | Signal Purpose |
-|---|---------|----------------|-------------|----------------|
-| 1 | **Absorption** | 2 methods: (a) Delta/price mismatch — positive delta + red candle = sellers absorbing, (b) High volume at level + low displacement + repeated attempts | Delta, Footprint, Price | **Entry signal** at VAH/VAL |
-| 2 | **Initiative** | 5 criteria: delta ≥ threshold, volume ≥ 1.5x average, body ≥ 3 ticks, delta/price aligned, one-sided imbalance bonus | Delta, Footprint, Volume | **Break-even / trail trigger** |
-| 3 | **Sweep** | Price through ≥3 thin orderbook levels + low volume per level + thin book confirmation (≥2 thin levels on swept side) | Orderbook, Price | **Liquidity grab / reversal alert** |
-| 4 | **Exhaustion** | Price trending + volume declining >30% + negative volume/delta trend + optional contrarian imbalance at extreme | Volume trend, Delta ROC, Footprint | **Exit warning** — momentum fading |
-| 5 | **Divergence** | Price new high/low but cumulative delta peak/trough fails to confirm (<80% of prior) | Price, Cumulative Delta peaks | **Trend reversal warning** |
+| #   | Pattern        | Detection Logic                                                                                                                                        | Source Data                        | Signal Purpose                      |
+| --- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ----------------------------------- |
+| 1   | **Absorption** | 2 methods: (a) Delta/price mismatch — positive delta + red candle = sellers absorbing, (b) High volume at level + low displacement + repeated attempts | Delta, Footprint, Price            | **Entry signal** at VAH/VAL         |
+| 2   | **Initiative** | 5 criteria: delta ≥ threshold, volume ≥ 1.5x average, body ≥ 3 ticks, delta/price aligned, one-sided imbalance bonus                                   | Delta, Footprint, Volume           | **Break-even / trail trigger**      |
+| 3   | **Sweep**      | Price through ≥3 thin orderbook levels + low volume per level + thin book confirmation (≥2 thin levels on swept side)                                  | Orderbook, Price                   | **Liquidity grab / reversal alert** |
+| 4   | **Exhaustion** | Price trending + volume declining >30% + negative volume/delta trend + optional contrarian imbalance at extreme                                        | Volume trend, Delta ROC, Footprint | **Exit warning** — momentum fading  |
+| 5   | **Divergence** | Price new high/low but cumulative delta peak/trough fails to confirm (<80% of prior)                                                                   | Price, Cumulative Delta peaks      | **Trend reversal warning**          |
 
 ### Strength Score Calculation
 
-| Pattern | Score Formula | Range |
-|---------|--------------|-------|
-| Absorption | `(volume / min_aggressive) * 40` or `(vol / min_aggressive) * 30 + attempts * 15` | 0-75 |
-| Initiative | `(delta/threshold)*20 + vol_accel*15 + body_ticks*5 + imbalance_count*10` | 0-50+ |
-| Sweep | `levels*15 + efficiency*20 + displacement*1000 + thin_confirm*15` | 30-100 |
-| Exhaustion | `40 + |vol_trend|*5 + |delta_roc|*5 + contrarian_bonus(20)` | 40-70 |
-| Divergence | `30 + (1 - ratio)*40 + price_new_extreme*10` | 30-80 |
+| Pattern    | Score Formula                                                                     | Range     |
+| ---------- | --------------------------------------------------------------------------------- | --------- | ----- | --------- | --------------------------- | ----- |
+| Absorption | `(volume / min_aggressive) * 40` or `(vol / min_aggressive) * 30 + attempts * 15` | 0-75      |
+| Initiative | `(delta/threshold)*20 + vol_accel*15 + body_ticks*5 + imbalance_count*10`         | 0-50+     |
+| Sweep      | `levels*15 + efficiency*20 + displacement*1000 + thin_confirm*15`                 | 30-100    |
+| Exhaustion | `40 +                                                                             | vol_trend | \*5 + | delta_roc | \*5 + contrarian_bonus(20)` | 40-70 |
+| Divergence | `30 + (1 - ratio)*40 + price_new_extreme*10`                                      | 30-80     |
 
 ---
 
@@ -302,12 +302,12 @@ Volume │                           Volume │
   VAL  │ POC │ VAH                         VAH₁  VAL₁  VAH₂  VAL₂
 ```
 
-| Shape | POC Position | Bias | Confidence Base | Trading Plan |
-|-------|-------------|------|----------------|-------------|
-| **P-shape** | >65% from bottom | LONG | 40 + poc_pct×30 | Buyers in control, buy dips to VAL |
-| **b-shape** | <35% from bottom | SHORT | 40 + (1-poc_pct)×30 | Sellers in control, sell rallies to VAH |
-| **D-shape** | ~50% | NEUTRAL | 20 | Balanced, fade extremes |
-| **Double Distribution** | Bimodal (valley <50% of peaks) | NEUTRAL | 30 | Transition — watch for breakout |
+| Shape                   | POC Position                   | Bias    | Confidence Base     | Trading Plan                            |
+| ----------------------- | ------------------------------ | ------- | ------------------- | --------------------------------------- |
+| **P-shape**             | >65% from bottom               | LONG    | 40 + poc_pct×30     | Buyers in control, buy dips to VAL      |
+| **b-shape**             | <35% from bottom               | SHORT   | 40 + (1-poc_pct)×30 | Sellers in control, sell rallies to VAH |
+| **D-shape**             | ~50%                           | NEUTRAL | 20                  | Balanced, fade extremes                 |
+| **Double Distribution** | Bimodal (valley <50% of peaks) | NEUTRAL | 30                  | Transition — watch for breakout         |
 
 ### Qualified Levels
 
@@ -341,11 +341,11 @@ Volume │                           Volume │
 
 ### Multi-Day Context Checks
 
-| Check | What It Does | Effect |
-|-------|-------------|--------|
-| Value accepted higher | Current VA above prior VA | +15 confidence if aligned with bias |
-| VAH rejection | Price rejected at VAH across multiple days | Bias → WARNING, -10 penalty to composite score |
-| Failed auction ("hooks") | Bullish hook below VAL, bearish hook above VAH | Reduces confidence |
+| Check                    | What It Does                                   | Effect                                         |
+| ------------------------ | ---------------------------------------------- | ---------------------------------------------- |
+| Value accepted higher    | Current VA above prior VA                      | +15 confidence if aligned with bias            |
+| VAH rejection            | Price rejected at VAH across multiple days     | Bias → WARNING, -10 penalty to composite score |
+| Failed auction ("hooks") | Bullish hook below VAL, bearish hook above VAH | Reduces confidence                             |
 
 ---
 
@@ -421,53 +421,53 @@ Each instrument has **pre-tuned thresholds** for all 5 pattern detectors, optimi
 ### Index Futures (9)
 
 | Instrument | Tick Size | Absorption Min Vol | Initiative Min Delta | VP Tick Size | Session |
-|-----------|-----------|-------------------|---------------------|-------------|---------|
-| NAS100 | 0.1 | 50 | 30 | 1.0 | NY Cash |
-| SP500 | 0.1 | 40 | 25 | 1.0 | NY Cash |
-| DJ30 | 1.0 | 40 | 25 | 5.0 | NY Cash |
-| UK100 | 0.1 | 30 | 20 | 1.0 | London |
-| DAX40 | 0.1 | 30 | 20 | 2.0 | London |
-| NIKKEI225 | 1.0 | 30 | 20 | 50.0 | Asian |
-| CAC40 | 0.1 | 25 | 18 | 1.0 | London |
-| ASX200 | 0.1 | 25 | 18 | 1.0 | Asian |
-| HK50 | 1.0 | 25 | 18 | 5.0 | Asian |
+| ---------- | --------- | ------------------ | -------------------- | ------------ | ------- |
+| NAS100     | 0.1       | 50                 | 30                   | 1.0          | NY Cash |
+| SP500      | 0.1       | 40                 | 25                   | 1.0          | NY Cash |
+| DJ30       | 1.0       | 40                 | 25                   | 5.0          | NY Cash |
+| UK100      | 0.1       | 30                 | 20                   | 1.0          | London  |
+| DAX40      | 0.1       | 30                 | 20                   | 2.0          | London  |
+| NIKKEI225  | 1.0       | 30                 | 20                   | 50.0         | Asian   |
+| CAC40      | 0.1       | 25                 | 18                   | 1.0          | London  |
+| ASX200     | 0.1       | 25                 | 18                   | 1.0          | Asian   |
+| HK50       | 1.0       | 25                 | 18                   | 5.0          | Asian   |
 
 ### Metals, Energy, Crypto
 
-| Instrument | Category | Tick Size | VP Tick Size | Session |
-|-----------|----------|-----------|-------------|---------|
-| XAUUSDT (Gold) | Metal | 0.01 | 0.50 | NY Cash |
-| XAGUSD (Silver) | Metal | 0.001 | 0.05 | Full Day |
-| USOIL | Energy | 0.01 | 0.10 | NY Cash |
-| UKOIL | Energy | 0.01 | 0.10 | London |
-| BTCUSDT | Crypto | 0.01 | 10.0 | Full Day |
+| Instrument      | Category | Tick Size | VP Tick Size | Session  |
+| --------------- | -------- | --------- | ------------ | -------- |
+| XAUUSDT (Gold)  | Metal    | 0.01      | 0.50         | NY Cash  |
+| XAGUSD (Silver) | Metal    | 0.001     | 0.05         | Full Day |
+| USOIL           | Energy   | 0.01      | 0.10         | NY Cash  |
+| UKOIL           | Energy   | 0.01      | 0.10         | London   |
+| BTCUSDT         | Crypto   | 0.01      | 10.0         | Full Day |
 
 ### Forex (10 Pairs)
 
-| Instrument | Tick Size | VP Tick Size | Session |
-|-----------|-----------|-------------|---------|
-| EURUSD | 0.00001 | 0.0005 | Full Day |
-| GBPUSD | 0.00001 | 0.0005 | Full Day |
-| USDJPY | 0.001 | 0.05 | Full Day |
-| AUDUSD | 0.00001 | 0.0005 | Full Day |
-| USDCAD | 0.00001 | 0.0005 | Full Day |
-| USDCHF | 0.00001 | 0.0005 | Full Day |
-| NZDUSD | 0.00001 | 0.0005 | Full Day |
-| EURGBP | 0.00001 | 0.0005 | Full Day |
-| EURJPY | 0.001 | 0.05 | Full Day |
-| GBPJPY | 0.001 | 0.05 | Full Day |
+| Instrument | Tick Size | VP Tick Size | Session  |
+| ---------- | --------- | ------------ | -------- |
+| EURUSD     | 0.00001   | 0.0005       | Full Day |
+| GBPUSD     | 0.00001   | 0.0005       | Full Day |
+| USDJPY     | 0.001     | 0.05         | Full Day |
+| AUDUSD     | 0.00001   | 0.0005       | Full Day |
+| USDCAD     | 0.00001   | 0.0005       | Full Day |
+| USDCHF     | 0.00001   | 0.0005       | Full Day |
+| NZDUSD     | 0.00001   | 0.0005       | Full Day |
+| EURGBP     | 0.00001   | 0.0005       | Full Day |
+| EURJPY     | 0.001     | 0.05         | Full Day |
+| GBPJPY     | 0.001     | 0.05         | Full Day |
 
 ### US Stocks (7)
 
 | Instrument | Tick Size | VP Tick Size | Session |
-|-----------|-----------|-------------|---------|
-| AAPL | 0.01 | 0.50 | NY Cash |
-| TSLA | 0.01 | 0.50 | NY Cash |
-| AMZN | 0.01 | 0.50 | NY Cash |
-| MSFT | 0.01 | 0.50 | NY Cash |
-| NVDA | 0.01 | 0.50 | NY Cash |
-| META | 0.01 | 0.50 | NY Cash |
-| GOOGL | 0.01 | 0.50 | NY Cash |
+| ---------- | --------- | ------------ | ------- |
+| AAPL       | 0.01      | 0.50         | NY Cash |
+| TSLA       | 0.01      | 0.50         | NY Cash |
+| AMZN       | 0.01      | 0.50         | NY Cash |
+| MSFT       | 0.01      | 0.50         | NY Cash |
+| NVDA       | 0.01      | 0.50         | NY Cash |
+| META       | 0.01      | 0.50         | NY Cash |
+| GOOGL      | 0.01      | 0.50         | NY Cash |
 
 ---
 
@@ -507,12 +507,12 @@ Each instrument has **pre-tuned thresholds** for all 5 pattern detectors, optimi
 
 The system auto-discovers instruments across 200+ broker-specific naming variants:
 
-| Internal | MT5 Symbol | Alternatives |
-|----------|-----------|-------------|
-| NAS100 | USTECm | USTEC, NAS100, US100, NQ100, NAS100USD... |
-| XAUUSDT | XAUUSDm | XAUUSD, GOLD... |
-| EURUSD | EURUSDm | EURUSD, EUR/USD... |
-| BTCUSDT | BTCUSDm | BTCUSD, BTC/USD... |
+| Internal | MT5 Symbol | Alternatives                              |
+| -------- | ---------- | ----------------------------------------- |
+| NAS100   | USTECm     | USTEC, NAS100, US100, NQ100, NAS100USD... |
+| XAUUSDT  | XAUUSDm    | XAUUSD, GOLD...                           |
+| EURUSD   | EURUSDm    | EURUSD, EUR/USD...                        |
+| BTCUSDT  | BTCUSDm    | BTCUSD, BTC/USD...                        |
 
 ---
 
@@ -559,17 +559,17 @@ The system auto-discovers instruments across 200+ broker-specific naming variant
 
 ### WebSocket Channels (9)
 
-| Channel | Data | Throttle | Priority |
-|---------|------|----------|----------|
-| `tick` | Price, size, side | 200ms | High |
-| `candle` | OHLCV + delta | None (immediate) | Critical |
-| `signal` | AggregatedSignal | None (immediate) | Critical |
-| `trade_state` | TradePhase transitions | None (immediate) | Critical |
-| `volume_profile` | POC/VAH/VAL/shape | None | Normal |
-| `bias` | DailyBias updates | None | Normal |
-| `orderbook` | L2 depth + imbalance | 500ms | Normal |
-| `delta` | Cumulative delta history | 200ms | Normal |
-| `stats` | System-wide per-instrument | 5000ms | Low |
+| Channel          | Data                       | Throttle         | Priority |
+| ---------------- | -------------------------- | ---------------- | -------- |
+| `tick`           | Price, size, side          | 200ms            | High     |
+| `candle`         | OHLCV + delta              | None (immediate) | Critical |
+| `signal`         | AggregatedSignal           | None (immediate) | Critical |
+| `trade_state`    | TradePhase transitions     | None (immediate) | Critical |
+| `volume_profile` | POC/VAH/VAL/shape          | None             | Normal   |
+| `bias`           | DailyBias updates          | None             | Normal   |
+| `orderbook`      | L2 depth + imbalance       | 500ms            | Normal   |
+| `delta`          | Cumulative delta history   | 200ms            | Normal   |
+| `stats`          | System-wide per-instrument | 5000ms           | Low      |
 
 ---
 
@@ -577,14 +577,14 @@ The system auto-discovers instruments across 200+ broker-specific naming variant
 
 Automated notifications for every trade lifecycle event:
 
-| Alert Type | Trigger | Content |
-|-----------|---------|---------|
+| Alert Type       | Trigger                                      | Content                                                        |
+| ---------------- | -------------------------------------------- | -------------------------------------------------------------- |
 | **ENTRY SIGNAL** | Absorption at qualified level, composite ≥40 | Direction, score, pattern, delta, volume, bias, entry/SL/TP/RR |
-| **BREAK EVEN** | First initiative auction after entry | SL moved to entry price — risk-free trade |
-| **TRAIL UPDATE** | Subsequent initiative prints | New SL level, trail progress |
-| **EXIT SIGNAL** | Trade closed (SL hit or auto-close) | PnL ticks, RR achieved, trade summary |
-| **EXIT WARNING** | Exhaustion or divergence detected | Pattern details, strength, direction warning |
-| **DAILY BIAS** | New VP shape computed | Shape, direction, confidence, POC/VAH/VAL, qualified levels |
+| **BREAK EVEN**   | First initiative auction after entry         | SL moved to entry price — risk-free trade                      |
+| **TRAIL UPDATE** | Subsequent initiative prints                 | New SL level, trail progress                                   |
+| **EXIT SIGNAL**  | Trade closed (SL hit or auto-close)          | PnL ticks, RR achieved, trade summary                          |
+| **EXIT WARNING** | Exhaustion or divergence detected            | Pattern details, strength, direction warning                   |
+| **DAILY BIAS**   | New VP shape computed                        | Shape, direction, confidence, POC/VAH/VAL, qualified levels    |
 
 ---
 
@@ -639,7 +639,7 @@ Automated notifications for every trade lifecycle event:
 ### Prerequisites
 
 - **Python 3.10+**
-- **MetaTrader 5 terminal** (for MT5 feed) OR **Bybit** (free, no account needed)
+- **MetaTrader 5 terminal** (for MT5 feed) OR **Bybit** (free, no account needed) OR **IB Gateway / TWS** (for IB feed)
 
 ### Setup
 
@@ -676,6 +676,16 @@ python -m orderflow_system.main
 python -m orderflow_system.main
 ```
 
+### Quick Start (IB Gateway)
+
+```bash
+# 1. Start IB Gateway / TWS locally with API enabled
+#    (IB Gateway: port 4002 paper / 4001 live; TWS: 7497 paper / 7496 live)
+# 2. Set DATA_SOURCE = DataSource.IB in config/settings.py
+# 3. Run the system
+python -m orderflow_system.main
+```
+
 ### Dashboard Only (Demo Mode)
 
 ```bash
@@ -690,7 +700,7 @@ python -m orderflow_system.dashboard
 All configuration is in `orderflow_system/config/settings.py`:
 
 ```python
-# Data source: "MT5", "BYBIT", or "BOTH"
+# Data source: "MT5", "BYBIT", "IB", or "BOTH"
 DATA_SOURCE = DataSource.BYBIT
 
 # MT5 credentials (only if using MT5 feed)
@@ -701,6 +711,17 @@ MT5 = MT5Config(
     poll_interval_ms=100,       # Tick polling frequency
     enable_book=True,           # Enable market book (DOM)
     download_history_days=3,    # Download M1 history for warmup
+)
+
+# IB Gateway (only if using IB feed)
+IB = IBConfig(
+    host="127.0.0.1",
+    port=4002,                  # 4002 paper / 4001 live (Gateway); 7497/7496 (TWS)
+    client_id=1,
+    symbols={
+        "XAUUSDT": ("CFD", "XAUUSD", "USD", "SMART"),
+        "BTCUSDT": ("CRYPTO", "BTC", "USD", "PAXOS"),
+    },
 )
 
 # Telegram alerts
@@ -755,6 +776,7 @@ python -m orderflow_system.main
 ```
 
 The system will:
+
 1. Connect to configured data source(s)
 2. Download historical bars (MT5) or connect to live feed (Bybit)
 3. Build initial volume profiles from historical data
@@ -851,17 +873,17 @@ orderflow_system/
 
 ## File Inventory
 
-| Category | Files | Python Lines | JS/CSS/HTML Lines | Total Lines |
-|----------|-------|-------------|-------------------|-------------|
-| Config | 1 | 946 | — | 946 |
-| Data | 5 | 1,405 | — | 1,405 |
-| Analytics | 4 | 844 | — | 844 |
-| Patterns | 5 | 919 | — | 919 |
-| Signals | 2 | 859 | — | 859 |
-| Alerts | 1 | 202 | — | 202 |
-| Dashboard | 4 + 8 static | 1,818 | 4,420 | 6,238 |
-| Main + Tests | 2 | 980 | — | 980 |
-| **Total** | **~32** | **~7,973** | **~4,420** | **~12,393** |
+| Category     | Files        | Python Lines | JS/CSS/HTML Lines | Total Lines |
+| ------------ | ------------ | ------------ | ----------------- | ----------- |
+| Config       | 1            | 946          | —                 | 946         |
+| Data         | 5            | 1,405        | —                 | 1,405       |
+| Analytics    | 4            | 844          | —                 | 844         |
+| Patterns     | 5            | 919          | —                 | 919         |
+| Signals      | 2            | 859          | —                 | 859         |
+| Alerts       | 1            | 202          | —                 | 202         |
+| Dashboard    | 4 + 8 static | 1,818        | 4,420             | 6,238       |
+| Main + Tests | 2            | 980          | —                 | 980         |
+| **Total**    | **~32**      | **~7,973**   | **~4,420**        | **~12,393** |
 
 ---
 
@@ -869,55 +891,55 @@ orderflow_system/
 
 ### REST Endpoints (16)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Dashboard UI |
-| GET | `/api/instruments` | Active instruments with stats + trade phase |
-| GET | `/api/scanner` | All pairs ranked by trade proximity (priority 0-118) |
-| GET | `/api/markers/{symbol}` | TradingView chart markers for signal events |
-| GET | `/api/candles/{symbol}` | OHLCV candle history (params: count, tf, range) |
-| GET | `/api/volume-profile/{symbol}` | Volume profile with POC/VAH/VAL (params: days, range) |
-| GET | `/api/bias/{symbol}` | Daily bias + qualified levels |
-| GET | `/api/signals/{symbol}` | Signal history (params: limit) |
-| GET | `/api/trade/{symbol}` | Active trade state |
-| GET | `/api/strategy-status/{symbol}` | 6-step Fabio methodology checklist |
-| GET | `/api/orderbook/{symbol}` | Current L2 orderbook (params: levels) |
-| GET | `/api/delta/{symbol}` | Cumulative delta history (params: count, tf, range) |
-| GET | `/api/footprint/{symbol}` | Footprint chart data (params: tf, range) |
-| GET | `/api/tape/{symbol}` | Time & sales (params: count) |
-| GET | `/api/microstructure/{symbol}` | Microstructure snapshot |
-| GET | `/api/stats` | System-wide stats |
+| Method | Endpoint                        | Description                                           |
+| ------ | ------------------------------- | ----------------------------------------------------- |
+| GET    | `/`                             | Dashboard UI                                          |
+| GET    | `/api/instruments`              | Active instruments with stats + trade phase           |
+| GET    | `/api/scanner`                  | All pairs ranked by trade proximity (priority 0-118)  |
+| GET    | `/api/markers/{symbol}`         | TradingView chart markers for signal events           |
+| GET    | `/api/candles/{symbol}`         | OHLCV candle history (params: count, tf, range)       |
+| GET    | `/api/volume-profile/{symbol}`  | Volume profile with POC/VAH/VAL (params: days, range) |
+| GET    | `/api/bias/{symbol}`            | Daily bias + qualified levels                         |
+| GET    | `/api/signals/{symbol}`         | Signal history (params: limit)                        |
+| GET    | `/api/trade/{symbol}`           | Active trade state                                    |
+| GET    | `/api/strategy-status/{symbol}` | 6-step Fabio methodology checklist                    |
+| GET    | `/api/orderbook/{symbol}`       | Current L2 orderbook (params: levels)                 |
+| GET    | `/api/delta/{symbol}`           | Cumulative delta history (params: count, tf, range)   |
+| GET    | `/api/footprint/{symbol}`       | Footprint chart data (params: tf, range)              |
+| GET    | `/api/tape/{symbol}`            | Time & sales (params: count)                          |
+| GET    | `/api/microstructure/{symbol}`  | Microstructure snapshot                               |
+| GET    | `/api/stats`                    | System-wide stats                                     |
 
 ### Strategy Status Labels
 
-| Status | Meaning |
-|--------|---------|
-| NO_DATA | No data received yet |
-| NO_LEVELS | No qualified levels identified |
-| WAITING_FOR_PRICE | Levels exist, price not nearby |
-| AT_LEVEL_SCANNING | Price near a qualified level |
-| WATCHING | Aggregator actively watching a level |
-| ENTRY_READY | Absorption detected, composite score ≥ threshold |
-| IN_TRADE | Position open |
-| BREAK_EVEN | SL moved to entry |
-| TRAILING | SL trailing on initiative |
-| IDLE | No active monitoring |
+| Status            | Meaning                                          |
+| ----------------- | ------------------------------------------------ |
+| NO_DATA           | No data received yet                             |
+| NO_LEVELS         | No qualified levels identified                   |
+| WAITING_FOR_PRICE | Levels exist, price not nearby                   |
+| AT_LEVEL_SCANNING | Price near a qualified level                     |
+| WATCHING          | Aggregator actively watching a level             |
+| ENTRY_READY       | Absorption detected, composite score ≥ threshold |
+| IN_TRADE          | Position open                                    |
+| BREAK_EVEN        | SL moved to entry                                |
+| TRAILING          | SL trailing on initiative                        |
+| IDLE              | No active monitoring                             |
 
 ### Scanner Priority Scoring
 
-| State | Base Score | Bonus |
-|-------|-----------|-------|
-| IN_TRADE | 100 | +3 per completed step |
-| TRAILING | 95 | +3 per completed step |
-| BREAK_EVEN | 90 | +3 per completed step |
-| ENTRY_READY | 85 | +3 per completed step |
-| AT_LEVEL_SCANNING | 70 | +3 per completed step |
-| WATCHING | 60 | +3 per completed step |
-| WAITING_FOR_PRICE | 40 | — |
-| NO_LEVELS | 20 | — |
-| NO_DATA | 10 | — |
-| OFFLINE | 5 | — |
-| IDLE | 0 | — |
+| State             | Base Score | Bonus                 |
+| ----------------- | ---------- | --------------------- |
+| IN_TRADE          | 100        | +3 per completed step |
+| TRAILING          | 95         | +3 per completed step |
+| BREAK_EVEN        | 90         | +3 per completed step |
+| ENTRY_READY       | 85         | +3 per completed step |
+| AT_LEVEL_SCANNING | 70         | +3 per completed step |
+| WATCHING          | 60         | +3 per completed step |
+| WAITING_FOR_PRICE | 40         | —                     |
+| NO_LEVELS         | 20         | —                     |
+| NO_DATA           | 10         | —                     |
+| OFFLINE           | 5          | —                     |
+| IDLE              | 0          | —                     |
 
 ---
 
@@ -930,6 +952,7 @@ python -m orderflow_system.dashboard
 ```
 
 Generates:
+
 - OHLCV candles via random walk (seeded per symbol/timeframe)
 - Volume profiles with Gaussian distributions
 - Cumulative delta with bar-level noise
@@ -938,12 +961,12 @@ Generates:
 
 ### Signal Quality Grading
 
-| Grade | Score | Meaning |
-|-------|-------|---------|
-| **A+** | ≥85 | Exceptional — multiple confirmations, high confluence |
-| **A** | ≥70 | Strong — solid pattern + level + bias alignment |
-| **B** | ≥55 | Good — pattern detected, partial confluence |
-| **C** | <55 | Weak — pattern only, consider skipping |
+| Grade  | Score | Meaning                                               |
+| ------ | ----- | ----------------------------------------------------- |
+| **A+** | ≥85   | Exceptional — multiple confirmations, high confluence |
+| **A**  | ≥70   | Strong — solid pattern + level + bias alignment       |
+| **B**  | ≥55   | Good — pattern detected, partial confluence           |
+| **C**  | <55   | Weak — pattern only, consider skipping                |
 
 ---
 
@@ -1060,10 +1083,10 @@ The `SignalAggregator` computes a composite score (0-100) that determines whethe
 
 ### SL/TP Calculation
 
-| Scenario | SL (LONG) | TP (LONG) | SL (SHORT) | TP (SHORT) |
-|----------|-----------|-----------|------------|------------|
-| **With bias** | `val - (vah-val)×0.1` | `vah` | `vah + (vah-val)×0.1` | `val` |
-| **No bias** | `price × 0.997` (-0.3%) | `price × 1.006` (+0.6%) | `price × 1.003` (+0.3%) | `price × 0.994` (-0.6%) |
+| Scenario      | SL (LONG)               | TP (LONG)               | SL (SHORT)              | TP (SHORT)              |
+| ------------- | ----------------------- | ----------------------- | ----------------------- | ----------------------- |
+| **With bias** | `val - (vah-val)×0.1`   | `vah`                   | `vah + (vah-val)×0.1`   | `val`                   |
+| **No bias**   | `price × 0.997` (-0.3%) | `price × 1.006` (+0.6%) | `price × 1.003` (+0.3%) | `price × 0.994` (-0.6%) |
 
 ---
 

@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 dependencies = [
     "websockets>=12.0",
     "aiohttp>=3.9",
+    "ib_async>=0.3.0",
     "pandas>=2.1",
     "numpy>=1.26",
     "scipy>=1.12",
