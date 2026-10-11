@@ -8,6 +8,9 @@
 [![Lines](https://img.shields.io/badge/code-~12,000-brightgreen?style=for-the-badge)](.)
 [![API](https://img.shields.io/badge/API-16%20endpoints-orange?style=for-the-badge)](.)
 
+> **🚀 Quick start:** See **[HOW_TO_RUN.md](HOW_TO_RUN.md)** for step-by-step
+> setup on Linux (Wine + MT5), Windows (native MT5), and Bybit.
+
 ---
 
 ## Table of Contents
@@ -676,6 +679,57 @@ python -m orderflow_system.main
 python -m orderflow_system.main
 ```
 
+### Quick Start (MT5 on Linux via Wine)
+
+MetaTrader 5 has no native Linux build, so on Linux we host it inside a
+[Wine](https://www.winehq.org/) prefix and reach it through the
+[`mt5linux`](https://pypi.org/project/mt5linux/) RPC bridge (`mt5server.exe`).
+This lets native Linux Python talk to the Windows MT5 terminal over a local
+socket, and the codebase detects the platform and switches automatically.
+
+The app still runs natively on Windows (using the official `MetaTrader5`
+package) — you only need the Wine setup below if you're on Linux.
+
+```bash
+# 0. Install the Linux bridge dependency (rpyc, matching the server binary)
+uv sync --extra mt5-linux          # or: pip install "rpyc>=6"
+
+# 1. Install MetaTrader 5 into a Wine prefix and log into your broker.
+#    e.g. WINEPREFIX=~/wine-mt5 wine "$HOME/wine-mt5/drive_c/Program Files/MetaTrader 5/terminal64.exe"
+
+# 2. Start the mt5linux RPC server (mt5server.exe) inside that Wine prefix.
+#    Default port is 18812.
+WINEPREFIX=~/wine-mt5 wine "$HOME/mt5server.exe" --port 18812
+
+# 3. Verify config (orderflow_system/config/settings.py):
+#      DATA_SOURCE = DataSource.MT5
+#      MT5 = MT5Config(
+#          login=...,            # optional auto-login
+#          password=...,
+#          server=...,
+#          bridge_host="127.0.0.1",
+#          bridge_port=18812,    # must match mt5server.exe --port
+#      )
+
+# 4. Run the system (Linux Python connects to the Wine-hosted MT5)
+python -m orderflow_system.main
+```
+
+> **rpyc version must match your `mt5server.exe`.** The published server
+> binaries (server-1.0.0 / 1.0.11 / 1.1.1) bundle **rpyc 6.x**. The rpyc 5.x
+> and 6.x wire protocols are incompatible, so install the rpyc version that
+> matches your server binary:
+>
+> - `server-1.1.1` / `1.0.11` / `1.0.0` → `pip install "rpyc>=6"`
+> - older 0.x server binaries → `pip install "rpyc==5.2.3"`
+
+The connection is handled transparently by `orderflow_system/data/mt5_bridge.py`:
+
+- **Windows** → imports the native `MetaTrader5` module.
+- **Linux** → opens a standalone RPyC connection to `mt5server.exe` and returns
+  a drop-in handle (same method names/constants), so `mt5_feed.py` needs no
+  platform branching.
+
 ### Quick Start (IB Gateway)
 
 ```bash
@@ -711,6 +765,10 @@ MT5 = MT5Config(
     poll_interval_ms=100,       # Tick polling frequency
     enable_book=True,           # Enable market book (DOM)
     download_history_days=3,    # Download M1 history for warmup
+    # Linux only — Wine + mt5linux RPC bridge (ignored on Windows):
+    bridge_host="127.0.0.1",    # mt5server.exe host (Wine-hosted MT5)
+    bridge_port=18812,          # mt5server.exe port (must match --port)
+    bridge_timeout=300,         # RPC request timeout (seconds)
 )
 
 # IB Gateway (only if using IB feed)

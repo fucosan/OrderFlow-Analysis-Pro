@@ -90,6 +90,15 @@ async def index():
     return JSONResponse({"error": "Dashboard frontend not found"}, status_code=404)
 
 
+@app.get("/journal", include_in_schema=False)
+async def journal_page():
+    """Serve the trade journal page."""
+    journal_path = os.path.join(_static_dir, "journal.html")
+    if os.path.isfile(journal_path):
+        return FileResponse(journal_path)
+    return JSONResponse({"error": "Journal page not found"}, status_code=404)
+
+
 # ──────────────────────────────────────────────
 # REST Endpoints
 # ──────────────────────────────────────────────
@@ -544,6 +553,33 @@ async def get_signals(symbol: str, limit: int = Query(default=50, le=200)):
             break
 
     return filtered
+
+
+@app.get("/api/journal")
+async def get_journal(
+    instrument: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+):
+    """Get recorded trade journal entries (newest first)."""
+    system = get_system()
+    if not system:
+        return {"trades": [], "total": 0}
+
+    trades = await system.db.get_trades(instrument=instrument, limit=limit, offset=offset)
+    total = await system.db.count_trades(instrument=instrument)
+    return {"trades": trades, "total": total}
+
+
+@app.get("/api/journal/instruments")
+async def journal_instruments():
+    """Get the list of instruments that have journal entries."""
+    system = get_system()
+    if not system:
+        return {"instruments": []}
+
+    instruments = await system.db.journal_instruments()
+    return {"instruments": instruments}
 
 
 @app.get("/api/trade/{symbol}")

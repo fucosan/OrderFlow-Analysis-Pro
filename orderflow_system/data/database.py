@@ -197,6 +197,14 @@ class Database:
     # ── Volume Profiles ──
 
     async def insert_volume_profile(self, instrument: str, vp: VolumeProfileResult):
+        # Upsert semantics: remove any existing row for the same day first, so
+        # each instrument+session_date has exactly ONE profile row (avoids the
+        # duplicate-row pollution from repeated periodic rebuilds).
+        await self._db.execute(
+            "DELETE FROM volume_profiles "
+            "WHERE instrument = ? AND session_date = ?",
+            (instrument, vp.session_date),
+        )
         await self._db.execute(
             "INSERT INTO volume_profiles "
             "(instrument, session_date, poc, vah, val, total_volume, shape, "
@@ -276,3 +284,83 @@ class Database:
              pnl_ticks, rr_ratio, signals_json, notes),
         )
         await self._db.commit()
+
+    async def get_trades(
+        self,
+        instrument: Optional[str] = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[dict]:
+        """
+        Fetch recorded trades from the journal (newest first).
+
+        Args:
+            instrument: Filter by instrument name (None = all instruments).
+            limit: Max rows to return.
+            offset: Skip N rows (for pagination).
+
+        Returns a list of dicts, each a trade_journal row with a human-readable
+        'pnl' and 'r_multiple' computed for the frontend.
+        """
+        clauses = []
+        params: list = []
+        if instrument:
+            clauses.append("instrument = ?")
+            params.append(instrument)
+
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
+        params.append(offset)
+
+        cursor = await self._db.execute(
+            f"SELECT id, instrument, direction, entry_time_ms, exit_time_ms, "
+            f"entry_price, exit_price, stop_loss, take_profit, pnl_ticks, "
+            f"rr_ratio, signals_json, notes "
+            f"FROM trade_journal {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            params,
+        )
+        rows = await cursor.fetchall()
+
+        trades = []
+        for r in rows:
+            pnl_ticks = float(r[9] or 0.0)
+            trades.append({
+                "id": r[0],
+                "instrument": r[1],
+                "direction": r[2],
+                "entry_time_ms": r[3],
+                "exit_time_ms": r[4],
+                "entry_price": r[5],
+                "exit_price": r[6],
+                "stop_loss": r[7],
+                "take_profit": r[8],
+                "pnl_ticks": pnl_ticks,
+                "rr_ratio": r[10],
+                "signals": r[11],
+                "notes": r[12],
+                "pnl": pnl_ticks,   # frontend Performance panel expects `pnl`
+                "timestamp": (r[4] or r[3] or 0),  # for time-based stats
+            })
+        return trades
+
+    async def count_trades(self, instrument: Optional[str] = None) -> int:
+        """Count journal rows, optionally filtered by instrument."""
+        if instrument:
+            cursor = await self._db.execute(
+                "SELECT COUNT(*) FROM trade_journal WHERE instrument = ?",
+                (instrument,),
+            )
+        else:
+            cursor = await self._db.execute(
+                "SELECT COUNT(*) FROM trade_journal"
+            )
+        row = await cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    async def journal_instruments(self) -> list[str]:
+        """List distinct instruments that have at least one journal entry."""
+        cursor = await self._db.execute(
+            "SELECT DISTINCT instrument FROM trade_journal ORDER BY instrument"
+        )
+        rows = await cursor.fetchall()
+        return [r[0] for r in rows]

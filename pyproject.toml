@@ -27,6 +27,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+# Linux: MT5 runs inside Wine and is reached via a standalone RPyC bridge to
+# `mt5server.exe`. The published server binaries (server-1.0.0/1.0.11/1.1.1)
+# bundle rpyc 6.x, so the client must use rpyc>=6 to match the wire protocol.
+# Windows: install the native `MetaTrader5` package instead (pip install MetaTrader5).
+mt5-linux = ["rpyc>=6"]
 
 [project.scripts]
 orderflow = "orderflow_system.main:main"

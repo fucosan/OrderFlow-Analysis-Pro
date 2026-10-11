@@ -84,8 +84,17 @@ class ProfileFramingEngine:
         # key = 'vah_zone' or 'val_zone', value = list of dates that rejected
 
     def add_profile(self, profile: VolumeProfileResult):
-        """Add a daily profile to history."""
-        self._profile_history.append(profile)
+        """Add a daily profile to history, keeping it sorted by date."""
+        # Replace any existing profile for the same session_date (keeps the
+        # latest rebuild of the day, avoiding duplicate rows for the same day).
+        for i, existing in enumerate(self._profile_history):
+            if existing.session_date == profile.session_date:
+                self._profile_history[i] = profile
+                break
+        else:
+            self._profile_history.append(profile)
+        # Keep history sorted chronologically (oldest first) so [-1] = latest day
+        self._profile_history.sort(key=lambda p: p.session_date)
         if len(self._profile_history) > self._max_history:
             self._profile_history = self._profile_history[-self._max_history:]
 
@@ -190,13 +199,19 @@ class ProfileFramingEngine:
                 bias.direction = BiasDirection.SHORT
                 bias.confidence = min(100, bias.confidence + 10)
 
-        # Check for VAH rejection across days (distribution warning)
+        # Check for VAH rejection across days (distribution warning).
+        # A genuine distribution top requires a PRIOR trend to distribute from.
+        # Only flag WARNING when the previous day's profile was directional
+        # (p_shape/b_shape) — i.e. there was a trend that could be distributing.
+        # A balanced/range-bound market (d_shape both days) is NOT a distribution,
+        # so it must stay NEUTRAL and remain tradeable.
         if len(recent) >= 2:
             vah_tolerance = (latest.vah - latest.val) * 0.1
             vahs_similar = all(
                 abs(p.vah - latest.vah) < vah_tolerance for p in recent[-2:]
             )
-            if vahs_similar and latest.shape != "p_shape":
+            had_prior_trend = prev.shape in ("p_shape", "b_shape")
+            if vahs_similar and had_prior_trend:
                 bias.direction = BiasDirection.WARNING
                 bias.confidence = min(100, bias.confidence + 10)
                 bias.notes += " | WARNING: VAH rejected for multiple days — possible distribution"

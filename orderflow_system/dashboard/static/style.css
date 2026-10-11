@@ -263,10 +263,27 @@ html, body {
 .panel-delta {
     font-family: var(--font-mono);
     font-size: 12px;
-    margin-left: auto;
 }
 .panel-delta.positive { color: var(--green); }
 .panel-delta.negative { color: var(--red); }
+
+.refocus-btn {
+    margin-left: auto;
+    background: var(--blue-bg);
+    border: 1px solid var(--blue);
+    color: var(--blue);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.refocus-btn:hover { background: var(--blue); color: #fff; }
+.refocus-btn:active { transform: translateY(1px); }
 
 .panel-count {
     font-family: var(--font-mono);

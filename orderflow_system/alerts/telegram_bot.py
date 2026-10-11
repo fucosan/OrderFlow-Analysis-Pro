@@ -98,14 +98,19 @@ class TelegramAlertBot:
 
         # Entry action details
         if agg_signal.action == "enter":
+            # Use the ACTUAL trade entry (matches the dashboard) when available;
+            # fall back to the signal's price_level otherwise. The signal's
+            # price_level is just where absorption printed — the real fill /
+            # entry can be different (and the SL/TP/R:R depend on the REAL entry).
+            entry = trade.entry_price if (trade and trade.entry_price > 0) \
+                else (agg_signal.signals[0].price_level if agg_signal.signals else 0.0)
             lines.extend([
                 "📊 TRADE SETUP:",
-                f"   Entry: ~{agg_signal.signals[0].price_level:.2f}" if agg_signal.signals else "",
+                f"   Entry: {entry:.2f}",
                 f"   Stop Loss: {agg_signal.suggested_sl:.2f}",
                 f"   Take Profit: {agg_signal.suggested_tp:.2f}",
             ])
-            if agg_signal.suggested_sl and agg_signal.signals:
-                entry = agg_signal.signals[0].price_level
+            if agg_signal.suggested_sl and entry > 0:
                 risk = abs(entry - agg_signal.suggested_sl)
                 reward = abs(agg_signal.suggested_tp - entry)
                 if risk > 0:

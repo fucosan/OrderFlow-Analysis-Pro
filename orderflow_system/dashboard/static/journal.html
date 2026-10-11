@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trade Journal — Orderflow</title>
+  <link rel="stylesheet" href="/static/journal.css?v=1">
+</head>
+
+<body>
+  <header id="journalHeader">
+    <div class="header-left">
+      <h1>📓 TRADE JOURNAL</h1>
+      <a class="back-link" href="/">&larr; Back to Dashboard</a>
+    </div>
+    <div class="header-right">
+      <span class="total-count" id="totalCount">0 trades</span>
+      <button id="btnRefresh" class="btn">↻ Refresh</button>
+      <button id="btnExport" class="btn">Export CSV</button>
+    </div>
+  </header>
+
+  <!-- Stats cards -->
+  <section id="statsRow">
+    <div class="stat-card">
+      <div class="stat-label">Total Trades</div>
+      <div class="stat-value" id="statTotal">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Wins</div>
+      <div class="stat-value profit" id="statWins">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Losses</div>
+      <div class="stat-value loss" id="statLosses">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Win Rate</div>
+      <div class="stat-value" id="statWinRate">0%</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Net PnL (ticks)</div>
+      <div class="stat-value" id="statNetPnL">0</div>
+    </div>
+  </section>
+
+  <!-- Filters -->
+  <section id="filtersSection">
+    <label for="instrumentFilter">Instrument</label>
+    <select id="instrumentFilter" class="filter-input">
+      <option value="">All instruments</option>
+    </select>
+    <label for="outcomeFilter">Outcome</label>
+    <select id="outcomeFilter" class="filter-input">
+      <option value="">All</option>
+      <option value="win">Win</option>
+      <option value="loss">Loss</option>
+      <option value="breakeven">Break-even</option>
+    </select>
+    <label for="searchInput">Search notes</label>
+    <input type="text" id="searchInput" class="filter-input" placeholder="Filter by notes / instrument...">
+  </section>
+
+  <!-- Journal table -->
+  <section id="journalSection">
+    <table id="journalTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Instrument</th>
+          <th>Direction</th>
+          <th>Entry Price</th>
+          <th>Exit Price</th>
+          <th>SL</th>
+          <th>TP</th>
+          <th>PnL (ticks)</th>
+          <th>R:R</th>
+          <th>Entered</th>
+          <th>Exited</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="journalTbody">
+        <tr class="empty-row">
+          <td colspan="12">No trades recorded yet.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <script src="/static/journal.js?v=1"></script>
+</body>
+
+</html>

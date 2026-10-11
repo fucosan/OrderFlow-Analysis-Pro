@@ -147,6 +147,14 @@ class RiskConfig:
     min_rr_ratio: float = 2.0                 # Minimum reward:risk
     max_rr_ratio: float = 5.0                 # Maximum target R:R
     signal_cooldown_seconds: float = 60.0     # Min time between signals
+    # Minimum stop-loss distance from entry, in PRICE UNITS (not ticks).
+    # Guarantees the SL clears the broker spread + normal noise. For BTCUSD
+    # this is 20 points (20 USD). Set per-instrument in the config functions.
+    min_sl_distance: float = 0.0
+    # Enable AUTOMATIC execution on MT5 for this specific instrument. Only
+    # instruments with auto_trade=True (AND the global MT5_AUTO_TRADE=1 gate)
+    # may be auto-traded. Leave False to get alerts only.
+    auto_trade: bool = False
 
 
 @dataclass
@@ -174,6 +182,13 @@ class MT5Config:
     password: str = ""                        # MT5 password (empty = use already logged in)
     server: str = ""                          # MT5 server (empty = use already logged in)
     path: str = ""                            # Path to MT5 terminal (empty = auto-detect)
+    # ── Linux / Wine bridge (mt5linux) ──
+    # On Linux, MT5 runs inside a Wine prefix and is exposed to native Python
+    # via `mt5server.exe` (mt5linux RPC bridge) over a local socket. These
+    # settings are ignored on Windows (native MetaTrader5 module is used).
+    bridge_host: str = "127.0.0.1"            # Host where mt5server.exe listens
+    bridge_port: int = 18812                  # Default mt5server.exe RPC port
+    bridge_timeout: int = 300                 # RPC request timeout (seconds)
     # Symbol mapping: internal name → MT5 broker symbol
     # Adjust these to match your broker's symbol names!
     symbols: dict = field(default_factory=lambda: {
@@ -188,8 +203,8 @@ class MT5Config:
         "ASX200": "AUS200m",
         "HK50": "HK50m",
         # ── Metals ──
-        "XAUUSDT": "XAUUSDm",
-        "XAGUSD": "XAGUSDm",
+        "XAUUSDT": "XAUUSDc",  # Exness broker symbol
+        "XAGUSD": "XAGUSDc",
         # ── Energy ──
         "USOIL": "USOILm",
         "UKOIL": "UKOILm",
@@ -214,7 +229,7 @@ class MT5Config:
         "META": "METAm",
         "GOOGL": "GOOGLm",
         # ── Crypto ──
-        "BTCUSDT": "BTCUSDm",
+        "BTCUSDT": "BTCUSDc",  # Exness broker symbol
     })
     poll_interval_ms: int = 100               # Tick polling interval (ms)
     enable_book: bool = True                  # Enable DOM/Market Depth data
@@ -314,7 +329,7 @@ def get_gold_config() -> InstrumentConfig:
             volume_decline_pct=0.25,
         ),
         volume_profile=VolumeProfileConfig(
-            session=SessionType.NY_CASH,
+            session=SessionType.LONDON,
             tick_size=0.50,
         ),
     )
@@ -895,6 +910,15 @@ def get_btcusd_config() -> InstrumentConfig:
             session=SessionType.FULL_DAY,
             tick_size=10.0,
         ),
+        risk=RiskConfig(
+            # BTCUSD: keep the stop at least 20 points (20 USD) from entry so
+            # it always clears the broker spread and normal tick noise.
+            min_sl_distance=20.0,
+            # Enable automatic MT5 execution for BTCUSD only. Other symbols
+            # default to auto_trade=False → alerts only. Requires the global
+            # MT5_AUTO_TRADE=1 gate in .env to take effect.
+            auto_trade=False,
+        ),
     )
 
 
@@ -948,14 +972,25 @@ def get_all_configs() -> list[InstrumentConfig]:
 #   DataSource.BYBIT → Use Bybit perpetuals (free crypto data)
 #   DataSource.IB    → Use Interactive Brokers (IB Gateway / TWS)
 #   DataSource.BOTH  → Run both feeds simultaneously
-DATA_SOURCE = DataSource.IB
+#
+# MT5 is cross-platform: on Windows it uses the native MetaTrader5 module;
+# on Linux it connects to a Wine-hosted MT5 via the mt5linux RPC bridge
+# (see MT5.bridge_host / MT5.bridge_port below).
+DATA_SOURCE = DataSource.BOTH
 
 # ── MT5 Configuration ──
 # Adjust symbol names to match your broker!
 # Common alternatives:
 #   NAS100: "USTEC", "NAS100", "US100", "USTEC.cash", "USTECH100", "#NAS100"
 #   Gold:   "XAUUSD", "GOLD", "XAUUSD.cash"
-MT5 = MT5Config()
+MT5 = MT5Config(
+    login=int(os.getenv("MT5_LOGIN", "0")),
+    password=os.getenv("MT5_PASSWORD", ""),
+    server=os.getenv("MT5_SERVER", ""),
+    bridge_host=os.getenv("MT5_BRIDGE_HOST", "127.0.0.1"),
+    bridge_port=int(os.getenv("MT5_BRIDGE_PORT", "18812")),
+    bridge_timeout=int(os.getenv("MT5_BRIDGE_TIMEOUT", "300")),
+)
 
 # ── IB Gateway Configuration ──
 # Point this at your locally running IB Gateway / TWS.

@@ -7,9 +7,16 @@ Provides:
   - Book of market (DOM) data for orderbook analysis
   - Symbol info (tick size, contract size, session times)
 
+Cross-platform:
+  - Windows: uses the native `MetaTrader5` module (terminal running natively).
+  - Linux:   uses the `mt5linux` RPC bridge — MT5 runs inside a Wine prefix and
+             is exposed via `mt5server.exe` over a local socket. The bridge
+             factory (`mt5_bridge.create_mt5_handle`) returns a drop-in handle
+             with the same API on both platforms.
+
 Requirements:
-  - MetaTrader 5 terminal installed and running on Windows
-  - pip install MetaTrader5
+  - Windows: MetaTrader 5 terminal running + `pip install MetaTrader5`
+  - Linux:   Wine-hosted MT5 + `mt5server.exe` running + `pip install mt5linux`
   - Broker account connected in MT5
 
 MT5 Symbol Mapping (broker-dependent, adjust in config):
@@ -25,6 +32,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Callable, Optional
 
+from orderflow_system.data.mt5_bridge import create_mt5_handle, describe_backend
 from orderflow_system.data.models import (
     Tick, Side, OrderbookSnapshot, OrderbookLevel, Candle,
 )
@@ -64,15 +72,28 @@ class MT5Feed:
         on_orderbook: Optional[Callable] = None,
         poll_interval_ms: int = 100,
         enable_book: bool = True,
+        login: int = 0,
+        password: str = "",
+        server: str = "",
+        bridge_host: str = "127.0.0.1",
+        bridge_port: int = 18812,
+        bridge_timeout: int = 300,
     ):
         self.symbols = symbols  # e.g., {"NAS100USDT": "USTEC", "XAUUSDT": "XAUUSD"}
         self.on_tick = on_tick
         self.on_orderbook = on_orderbook
         self.poll_interval_ms = poll_interval_ms
         self.enable_book = enable_book
+        self.login = login
+        self.password = password
+        self.server = server
+        self.bridge_host = bridge_host
+        self.bridge_port = bridge_port
+        self.bridge_timeout = bridge_timeout
         self._running = False
         self._mt5 = None
         self._last_tick_time: dict[str, int] = {}  # Track last seen tick per symbol
+        self._last_price: dict[str, float] = {}    # Last trade/mid price per symbol (tick rule)
         self._initialized = False
 
     def connect(self) -> bool:
@@ -122,31 +143,55 @@ class MT5Feed:
             logger.info("MT5 disconnected")
 
     def _initialize_mt5(self) -> bool:
-        """Initialize MT5 connection."""
+        """Initialize MT5 connection (native module or mt5linux bridge)."""
         try:
-            import MetaTrader5 as mt5
-            self._mt5 = mt5
-        except ImportError:
-            logger.error(
-                "MetaTrader5 package not installed. Install with: "
-                "pip install MetaTrader5"
+            mt5 = create_mt5_handle(
+                host=self.bridge_host,
+                port=self.bridge_port,
+                timeout=self.bridge_timeout,
+                login=self.login or None,
+                password=self.password or None,
+                server=self.server or None,
             )
+            self._mt5 = mt5
+        except RuntimeError as exc:
+            logger.error(str(exc))
             return False
 
-        if not mt5.initialize():
-            error = mt5.last_error()
-            logger.error(f"MT5 initialize() failed: {error}")
+        logger.info(f"MT5 backend: {describe_backend()}")
+
+        # Build initialize kwargs. Both the native module (Windows) and the
+        # mt5linux 0.x standalone client (Linux) accept login/password/server
+        # here — the 0.x client forwards them to mt5.initialize() on the server.
+        init_kwargs = {}
+        if self.login:
+            init_kwargs["login"] = self.login
+        if self.password:
+            init_kwargs["password"] = self.password
+        if self.server:
+            init_kwargs["server"] = self.server
+
+        try:
+            if not mt5.initialize(**init_kwargs):
+                error = mt5.last_error()
+                logger.error(f"MT5 initialize() failed: {error}")
+                return False
+        except Exception as exc:
+            logger.error(f"MT5 initialize() raised: {exc}")
             return False
 
         self._initialized = True
 
         # Log account info
-        account = mt5.account_info()
-        if account:
-            logger.info(
-                f"MT5 connected: {account.server} | "
-                f"Account: {account.login} | Balance: {account.balance}"
-            )
+        try:
+            account = mt5.account_info()
+            if account:
+                logger.info(
+                    f"MT5 connected: {account.server} | "
+                    f"Account: {account.login} | Balance: {account.balance}"
+                )
+        except Exception as exc:
+            logger.warning(f"Could not read MT5 account info: {exc}")
 
         # Validate symbols exist
         for internal, mt5_sym in list(self.symbols.items()):
@@ -178,43 +223,43 @@ class MT5Feed:
     # Known alternative symbol names per asset class (broker-dependent)
     _SYMBOL_ALTERNATIVES: dict[str, list[str]] = {
         # Indices
-        "USTEC": ["USTEC", "USTECm", "NAS100", "US100", "USTEC.cash", "NAS100.cash", "USTECH100", "#NAS100", "NASDAQ"],
-        "US500": ["US500", "US500m", "SP500", "SPX500", "US500.cash", "#SP500", "SP500m"],
-        "US30":  ["US30", "US30m", "DJ30", "DJI30", "US30.cash", "#DJ30", "DJ30m"],
-        "UK100": ["UK100", "UK100m", "FTSE100", "UK100.cash", "#UK100"],
-        "DE30":  ["DE30", "DE30m", "DE40", "DE40m", "DAX40", "GER40", "GER30", "DE30.cash"],
-        "JP225": ["JP225", "JP225m", "NI225", "NIKKEI225", "JP225.cash"],
-        "FR40":  ["FR40", "FR40m", "CAC40", "FRA40", "FR40.cash"],
-        "AUS200":["AUS200", "AUS200m", "AU200", "ASX200", "AUS200.cash"],
-        "HK50":  ["HK50", "HK50m", "HSI50", "HK50.cash"],
+        "USTEC": ["USTEC", "USTECm", "USTECc", "NAS100", "US100", "USTEC.cash", "NAS100.cash", "USTECH100", "#NAS100", "NASDAQ"],
+        "US500": ["US500", "US500m", "US500c", "SP500", "SPX500", "US500.cash", "#SP500", "SP500m"],
+        "US30":  ["US30", "US30m", "US30c", "DJ30", "DJI30", "US30.cash", "#DJ30", "DJ30m"],
+        "UK100": ["UK100", "UK100m", "UK100c", "FTSE100", "UK100.cash", "#UK100"],
+        "DE30":  ["DE30", "DE30m", "DE30c", "DE40", "DE40m", "DAX40", "GER40", "GER30", "DE30.cash"],
+        "JP225": ["JP225", "JP225m", "JP225c", "NI225", "NIKKEI225", "JP225.cash"],
+        "FR40":  ["FR40", "FR40m", "FR40c", "CAC40", "FRA40", "FR40.cash"],
+        "AUS200":["AUS200", "AUS200m", "AUS200c", "AU200", "ASX200", "AUS200.cash"],
+        "HK50":  ["HK50", "HK50m", "HK50c", "HSI50", "HK50.cash"],
         # Metals
-        "XAUUSD":["XAUUSD", "XAUUSDm", "GOLD", "GOLDm", "XAUUSD.cash", "#XAUUSD"],
-        "XAGUSD":["XAGUSD", "XAGUSDm", "SILVER", "SILVERm", "XAGUSD.cash"],
+        "XAUUSD":["XAUUSD", "XAUUSDm", "XAUUSDc", "GOLD", "GOLDm", "XAUUSD.cash", "#XAUUSD"],
+        "XAGUSD":["XAGUSD", "XAGUSDm", "XAGUSDc", "SILVER", "SILVERm", "XAGUSD.cash"],
         # Energy
-        "USOIL": ["USOIL", "USOILm", "WTI", "XTIUSD", "XTIUSDm", "CrudeOIL", "USCrude"],
-        "UKOIL": ["UKOIL", "UKOILm", "BRENT", "XBRUSD", "XBRUSDm", "BrentOIL"],
+        "USOIL": ["USOIL", "USOILm", "USOILc", "WTI", "XTIUSD", "XTIUSDm", "CrudeOIL", "USCrude"],
+        "UKOIL": ["UKOIL", "UKOILm", "UKOILc", "BRENT", "XBRUSD", "XBRUSDm", "BrentOIL"],
         # Forex Majors
-        "EURUSD":["EURUSD", "EURUSDm", "EURUSD.cash"],
-        "GBPUSD":["GBPUSD", "GBPUSDm"],
-        "USDJPY":["USDJPY", "USDJPYm"],
-        "AUDUSD":["AUDUSD", "AUDUSDm"],
-        "USDCAD":["USDCAD", "USDCADm"],
-        "USDCHF":["USDCHF", "USDCHFm"],
-        "NZDUSD":["NZDUSD", "NZDUSDm"],
+        "EURUSD":["EURUSD", "EURUSDm", "EURUSDc", "EURUSD.cash"],
+        "GBPUSD":["GBPUSD", "GBPUSDm", "GBPUSDc"],
+        "USDJPY":["USDJPY", "USDJPYm", "USDJPYc"],
+        "AUDUSD":["AUDUSD", "AUDUSDm", "AUDUSDc"],
+        "USDCAD":["USDCAD", "USDCADm", "USDCADc"],
+        "USDCHF":["USDCHF", "USDCHFm", "USDCHFc"],
+        "NZDUSD":["NZDUSD", "NZDUSDm", "NZDUSDc"],
         # Forex Crosses
-        "EURGBP":["EURGBP", "EURGBPm"],
-        "EURJPY":["EURJPY", "EURJPYm"],
-        "GBPJPY":["GBPJPY", "GBPJPYm"],
+        "EURGBP":["EURGBP", "EURGBPm", "EURGBPc"],
+        "EURJPY":["EURJPY", "EURJPYm", "EURJPYc"],
+        "GBPJPY":["GBPJPY", "GBPJPYm", "GBPJPYc"],
         # Stocks
-        "AAPL":  ["AAPL", "AAPLm", "#AAPL", "AAPL.US"],
-        "TSLA":  ["TSLA", "TSLAm", "#TSLA", "TSLA.US"],
-        "AMZN":  ["AMZN", "AMZNm", "#AMZN", "AMZN.US"],
-        "MSFT":  ["MSFT", "MSFTm", "#MSFT", "MSFT.US"],
-        "NVDA":  ["NVDA", "NVDAm", "#NVDA", "NVDA.US"],
-        "META":  ["META", "METAm", "#META", "META.US"],
-        "GOOGL": ["GOOGL", "GOOGLm", "#GOOGL", "GOOGL.US", "GOOG", "GOOGm"],
+        "AAPL":  ["AAPL", "AAPLm", "AAPLc", "#AAPL", "AAPL.US"],
+        "TSLA":  ["TSLA", "TSLAm", "TSLAc", "#TSLA", "TSLA.US"],
+        "AMZN":  ["AMZN", "AMZNm", "AMZNc", "#AMZN", "AMZN.US"],
+        "MSFT":  ["MSFT", "MSFTm", "MSFTc", "#MSFT", "MSFT.US"],
+        "NVDA":  ["NVDA", "NVDAm", "NVDAC", "#NVDA", "NVDA.US"],
+        "META":  ["META", "METAm", "METAc", "#META", "META.US"],
+        "GOOGL": ["GOOGL", "GOOGLm", "GOOGLc", "#GOOGL", "GOOGL.US", "GOOG", "GOOGm"],
         # Crypto
-        "BTCUSD":["BTCUSD", "BTCUSDm", "BTCUSDT"],
+        "BTCUSD":["BTCUSD", "BTCUSDm", "BTCUSDc", "BTCUSDT", "BTCUSDTc"],
     }
 
     def _find_symbol_alternative(self, mt5_sym: str, internal: str) -> bool:
@@ -229,9 +274,15 @@ class MT5Feed:
                 alternatives = alts
                 break
 
-        # Fallback: try plain name with/without 'm' suffix
+        # Fallback: try plain name with/without 'm'/'c' suffix
         if not alternatives:
-            alternatives = [mt5_sym, mt5_sym.rstrip('m'), mt5_sym + 'm']
+            alternatives = [
+                mt5_sym,
+                mt5_sym.rstrip('m'),
+                mt5_sym + 'm',
+                mt5_sym.rstrip('c'),
+                mt5_sym + 'c',
+            ]
 
         for alt in alternatives:
             info = mt5.symbol_info(alt)
@@ -291,27 +342,45 @@ class MT5Feed:
 
             # Determine aggressor side from tick flags
             flags = int(t['flags'])
+            last_price = float(t['last'])
+            bid = float(t['bid'])
+            ask = float(t['ask'])
+
             if flags & TICK_FLAG_BUY:
                 side = Side.BUY
             elif flags & TICK_FLAG_SELL:
                 side = Side.SELL
-            else:
-                # No buy/sell flag — use price vs previous bid/ask heuristic
-                last_price = float(t['last'])
-                bid = float(t['bid'])
-                ask = float(t['ask'])
+            elif last_price > 0:
+                # Trade tick without a buy/sell flag — use price vs bid/ask.
                 if last_price >= ask:
                     side = Side.BUY
                 elif last_price <= bid:
                     side = Side.SELL
                 else:
-                    side = Side.BUY  # Default to buy if ambiguous
+                    side = Side.BUY  # inside spread → ambiguous
+            else:
+                # QUOTE-ONLY tick (no trade price, e.g. Exness BTCUSDc sends
+                # only bid/ask updates with flags=0x06). Classify with the
+                # classic TICK RULE: compare the mid to the previous mid —
+                # uptick = buyer-initiated, downtick = seller-initiated.
+                mid = (bid + ask) / 2.0 if (bid > 0 and ask > 0) else 0.0
+                prev = self._last_price.get(internal, 0.0)
+                if mid > 0 and prev > 0:
+                    if mid > prev:
+                        side = Side.BUY
+                    elif mid < prev:
+                        side = Side.SELL
+                    else:
+                        side = Side.BUY  # unchanged → neutral, default buy
+                else:
+                    side = Side.BUY  # no reference yet
+                if mid > 0:
+                    self._last_price[internal] = mid
 
             # Use 'last' price (actual trade price) when available,
             # fall back to mid of bid/ask
-            last_price = float(t['last'])
             if last_price == 0:
-                last_price = (float(t['bid']) + float(t['ask'])) / 2.0
+                last_price = (bid + ask) / 2.0
 
             volume = float(t['volume_real']) if t['volume_real'] > 0 else float(t['volume'])
             if volume == 0:
@@ -482,6 +551,45 @@ class MT5Feed:
             "currency_base": info.currency_base,
             "currency_profit": info.currency_profit,
         }
+
+    # ── Order Execution (auto-trading) ──
+    # These wrap the MT5 trade API. The request dict keys follow the native
+    # MetaTrader5 `order_send` request schema. The underlying handle is either
+    # the native module (Windows) or the RPyC bridge to Wine-hosted MT5
+    # (Linux), both of which expose the same API.
+
+    def get_mt5_symbol(self, internal: str) -> Optional[str]:
+        """Resolve an internal name (BTCUSDT) to the broker symbol (BTCUSDm)."""
+        return self.symbols.get(internal)
+
+    def order_send(self, request: dict):
+        """Send a trade request and return the raw MT5 result dict."""
+        mt5 = self._mt5
+        if mt5 is None:
+            return None
+        try:
+            result = mt5.order_send(request)
+            if result is None:
+                return None
+            return {
+                "retcode": getattr(result, "retcode", None),
+                "deal": getattr(result, "deal", 0),
+                "order": getattr(result, "order", 0),
+                "volume": getattr(result, "volume", 0),
+                "price": getattr(result, "price", 0),
+                "request": result.request,
+            }
+        except Exception as exc:
+            logger.error(f"MT5 order_send failed: {exc}")
+            return None
+
+    def precision(self, internal: str) -> int:
+        """Return the price digits for a symbol (default 2)."""
+        mt5_sym = self.get_mt5_symbol(internal)
+        info = mt5_sym and self._mt5 and self._mt5.symbol_info(mt5_sym)
+        if info is None:
+            return 2
+        return int(getattr(info, "digits", 2))
 
     def list_available_symbols(self, filter_text: str = "") -> list[str]:
         """List available symbols in MT5 matching a filter."""

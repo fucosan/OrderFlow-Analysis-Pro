@@ -1,0 +1,1 @@
+"""Automated execution components (MT5 auto-trading)."""
